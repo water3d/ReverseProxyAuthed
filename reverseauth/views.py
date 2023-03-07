@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -65,7 +65,9 @@ class MainPassthroughAPIView(APIView):
 	def get(self, request, **kwargs):
 		service = kwargs['service']
 		if service not in RPA_AVAILABLE_SERVICES:
-			return HttpResponse("404")  # this isn't how to do this. Need an updated view here.
+			resp = HttpResponse("Requested service {} is not available on this server".format(service))
+			resp.status_code=404
+			return resp
 		base_url = RPA_AVAILABLE_SERVICES[service]
 
 		# Step 1: Check that the user is authorized. Send the request object, the service, and the params through
@@ -76,7 +78,7 @@ class MainPassthroughAPIView(APIView):
 
 		# Step 2: Craft and send the request
 		url = "{}/{}/?{}".format(base_url, service, request.META['QUERY_STRING'])
-		response = requests.get(url)
+		response = requests.get(url, stream=True)
 		print(response.url)
 
 		# Step 2b: If we anticipate the server will open a stream with us to send a ton of data, we should probably do the
@@ -84,10 +86,13 @@ class MainPassthroughAPIView(APIView):
 		# through, then read some more. This will be a bit slow for the end user, but can be optimized - we read some chunks,
 		# then send those chunks through - we might also be able to handle it with async/await, or spin off a subprocess.
 		# should be able to feed the streaming body from requests into a StreamingHTTPResponse object from Django.
-		# TODO: See above
+		# TODO: See above - we are currently streaming data by default below
 
-		# Step 3: Craft the response. We should return the same HTTP status code as the server sends to us
-		return HttpResponse(response.content, content_type="application/json")
+		# Step 3: Craft the response.
+		# TODO: We should return the same HTTP status code as the server sends to us
+		resp = StreamingHttpResponse(response.iter_lines(), content_type="application/json")
+		resp.status_code=response.status_code
+		return resp
 
 
 def _check_auth(request, service, query_string=None):
