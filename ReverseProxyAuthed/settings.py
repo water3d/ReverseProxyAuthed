@@ -12,13 +12,11 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 
 from pathlib import Path
 
+from local_settings import *
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-REVERSE_API_URL = r"https://climate-dev.nkn.uidaho.edu/Services/"
-AVAILABLE_SERVICES = [
-    "get-netcdf-data"
-]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
@@ -42,7 +40,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'reverseauth.apps.ReverseauthConfig',
+    'rest_framework'
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [  # by default, right now, we're going to require authentication to access the API - we'll get more specific elsewhere
+        'rest_framework.permissions.IsAuthenticated'
+    ]
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

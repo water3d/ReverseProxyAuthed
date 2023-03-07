@@ -1,7 +1,13 @@
 from django.shortcuts import render
 from django.http import HttpResponse
 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 import requests
+
+from ReverseProxyAuthed.settings import RPA_REVERSE_API_URL, RPA_AVAILABLE_SERVICES
 
 # Create your views here.
 
@@ -47,23 +53,28 @@ def test(request):
 		("variable-name", "spi5y"),
 		("request-JSON", "True")
 	]
-	test_url = "https://climate-dev.nkn.uidaho.edu/Services/get-netcdf-data/?"
+	test_url = "{}/get-netcdf-data/?".format(RPA_REVERSE_API_URL)
 	response = requests.get(test_url, params2)
 	print(response.url)
 	return HttpResponse(response.content, content_type="application/json")
 
 
+
+
 def api(request, service):
+
+	if service not in RPA_AVAILABLE_SERVICES:
+		return HttpResponse("404")  # this isn't how to do this. Need an updated view here.
 
 	# Step 1: Check that the user is authorized. Send the request object, the service, and the params through
 	# so we can make sure they're allowed to send this request
-	authed = _check_auth(request, service, query_string=request.META['QUERY_STRING'])
-	if not authed:
-		return  # TODO: Make this return an HTTPResponse with the right information. Maybe DRF can help, or maybe we do this manually to keep it lean.
+	auth_data = _check_auth(request, service, query_string=request.META['QUERY_STRING'])
+	if not auth_data['authed']:
+		return auth_data['response']# TODO: Make this return an HTTPResponse with the right information. Maybe DRF can help, or maybe we do this manually to keep it lean.
 
 	# Step 2: Craft and send the request
-	test_url = "https://climate-dev.nkn.uidaho.edu/Services/{}/?{}".format(service, request.META['QUERY_STRING'])
-	response = requests.get(test_url)
+	url = "{}/{}/?{}".format(RPA_REVERSE_API_URL, service, request.META['QUERY_STRING'])
+	response = requests.get(url)
 	print(response.url)
 
 	# Step 2b: If we anticipate the server will open a stream with us to send a ton of data, we should probably do the
@@ -78,4 +89,4 @@ def api(request, service):
 
 def _check_auth(request, service, query_string=None):
 	# TODO: Make it actually check they're authorized in some way. This will likely depend on the endpoint. For now, it's all authorized - we'll likely start by just checking a token value.
-	return True
+	return {'authed': True}
