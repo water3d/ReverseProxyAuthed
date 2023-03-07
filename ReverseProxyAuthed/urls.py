@@ -21,6 +21,6 @@ from reverseauth import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('test', views.test),
-    path('api/<str:service>/', views.api),
+    path('api/<str:service>/', views.MainPassthroughAPIView.as_view()),
     path('api-auth/', include('rest_framework.urls'))
 ]

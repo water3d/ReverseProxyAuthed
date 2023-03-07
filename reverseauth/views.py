@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 import requests
 
-from ReverseProxyAuthed.settings import RPA_REVERSE_API_URL, RPA_AVAILABLE_SERVICES
+from ReverseProxyAuthed.settings import RPA_AVAILABLE_SERVICES
 
 # Create your views here.
 
@@ -53,40 +53,43 @@ def test(request):
 		("variable-name", "spi5y"),
 		("request-JSON", "True")
 	]
-	test_url = "{}/get-netcdf-data/?".format(RPA_REVERSE_API_URL)
+	test_url = "{}/get-netcdf-data/?".format(RPA_AVAILABLE_SERVICES['get-netcdf-data'])
 	response = requests.get(test_url, params2)
 	print(response.url)
 	return HttpResponse(response.content, content_type="application/json")
 
 
 
+class MainPassthroughAPIView(APIView):
+	permission_classes = [IsAuthenticated]
+	def get(self, request, **kwargs):
+		service = kwargs['service']
+		if service not in RPA_AVAILABLE_SERVICES:
+			return HttpResponse("404")  # this isn't how to do this. Need an updated view here.
+		base_url = RPA_AVAILABLE_SERVICES[service]
 
-def api(request, service):
+		# Step 1: Check that the user is authorized. Send the request object, the service, and the params through
+		# so we can make sure they're allowed to send this request
+		auth_data = _check_auth(request, service, query_string=request.META['QUERY_STRING'])
+		if not auth_data['authed']:
+			return auth_data['response']# TODO: Make this return an HTTPResponse with the right information. Maybe DRF can help, or maybe we do this manually to keep it lean.
 
-	if service not in RPA_AVAILABLE_SERVICES:
-		return HttpResponse("404")  # this isn't how to do this. Need an updated view here.
+		# Step 2: Craft and send the request
+		url = "{}/{}/?{}".format(base_url, service, request.META['QUERY_STRING'])
+		response = requests.get(url)
+		print(response.url)
 
-	# Step 1: Check that the user is authorized. Send the request object, the service, and the params through
-	# so we can make sure they're allowed to send this request
-	auth_data = _check_auth(request, service, query_string=request.META['QUERY_STRING'])
-	if not auth_data['authed']:
-		return auth_data['response']# TODO: Make this return an HTTPResponse with the right information. Maybe DRF can help, or maybe we do this manually to keep it lean.
+		# Step 2b: If we anticipate the server will open a stream with us to send a ton of data, we should probably do the
+		# same on our end to stream data straight through to the end user (e.g. we'll read the buffer, immediately send it
+		# through, then read some more. This will be a bit slow for the end user, but can be optimized - we read some chunks,
+		# then send those chunks through - we might also be able to handle it with async/await, or spin off a subprocess.
+		# should be able to feed the streaming body from requests into a StreamingHTTPResponse object from Django.
+		# TODO: See above
 
-	# Step 2: Craft and send the request
-	url = "{}/{}/?{}".format(RPA_REVERSE_API_URL, service, request.META['QUERY_STRING'])
-	response = requests.get(url)
-	print(response.url)
-
-	# Step 2b: If we anticipate the server will open a stream with us to send a ton of data, we should probably do the
-	# same on our end to stream data straight through to the end user (e.g. we'll read the buffer, immediately send it
-	# through, then read some more. This will be a bit slow for the end user, but can be optimized - we read some chunks,
-	# then send those chunks through - we might also be able to handle it with async/await, or spin off a subprocess
-	# TODO: See above
-
-	# Step 3: Craft the response. We should return the same HTTP status code as the server sends to us
-	return HttpResponse(response.content, content_type="application/json")
+		# Step 3: Craft the response. We should return the same HTTP status code as the server sends to us
+		return HttpResponse(response.content, content_type="application/json")
 
 
 def _check_auth(request, service, query_string=None):
-	# TODO: Make it actually check they're authorized in some way. This will likely depend on the endpoint. For now, it's all authorized - we'll likely start by just checking a token value.
+	# TODO: For now, just being authenticated is enough. But at some point we'll want more
 	return {'authed': True}
